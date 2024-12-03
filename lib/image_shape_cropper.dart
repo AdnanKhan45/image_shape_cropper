@@ -8,8 +8,9 @@ class ImageShapeCropper {
   Future<Uint8List?> cropOval({
     required String sourcePath,
     double angle = 0.0,
-    int? width,
-    int? height,
+    double? width,
+    double? height,
+    double? scale,
     String? compressFormat,
     int? compressQuality
   }) {
@@ -20,6 +21,7 @@ class ImageShapeCropper {
       height: height,
       compressFormat: compressFormat,
       compressQuality: compressQuality,
+      scale: scale,
     );
   }
 }

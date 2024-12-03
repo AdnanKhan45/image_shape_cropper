@@ -25,12 +25,13 @@ public class ImageShapeCropperPlugin: NSObject, FlutterPlugin {
             }
 
             let angle = args["angle"] as? Double ?? 0.0
-            let width = args["width"] as? Int
-            let height = args["height"] as? Int
+            let width = args["width"] as? Double
+            let height = args["height"] as? Double
+            let scale = args["scale"] as? Double ?? 1.0
             let compressFormat = args["compressFormat"] as? String ?? "png"
             let compressQuality = args["compressQuality"] as? Int ?? 100
 
-            print("cropOval called with sourcePath: \(sourcePath), angle: \(angle), width: \(String(describing: width)), height: \(String(describing: height)), compressFormat: \(compressFormat), compressQuality: \(compressQuality)")
+            print("cropOval called with sourcePath: \(sourcePath), angle: \(angle), width: \(String(describing: width)), height: \(String(describing: height)), scale: \(scale), compressFormat: \(compressFormat), compressQuality: \(compressQuality)")
 
             guard let image = UIImage(contentsOfFile: sourcePath) else {
                 print("Cannot load image from path: \(sourcePath)")
@@ -46,8 +47,8 @@ public class ImageShapeCropperPlugin: NSObject, FlutterPlugin {
             }
             print("Image rotated by \(angle) degrees.")
 
-            // Crop to oval without stretching
-            let ovalImage = cropOvalImage(image: rotatedImage, width: width, height: height)
+            // Crop to oval with scaling
+            let ovalImage = cropOvalImage(image: rotatedImage, width: width, height: height, scale: scale)
             print("Image cropped to oval.")
 
             // Compress the image
@@ -97,68 +98,65 @@ public class ImageShapeCropperPlugin: NSObject, FlutterPlugin {
         return rotatedImage
     }
 
-    // Helper method to crop the image into an oval shape
-    private func cropOvalImage(image: UIImage, width: Int?, height: Int?) -> UIImage {
-        let desiredWidth = CGFloat(width ?? Int(image.size.width))
-        let desiredHeight = CGFloat(height ?? Int(image.size.height))
-        let desiredSize = CGSize(width: desiredWidth, height: desiredHeight)
+    // Helper method to crop the image into an oval shape with scaling
+    private func cropOvalImage(image: UIImage, width: Double?, height: Double?, scale: Double) -> UIImage {
+        let width = width ?? Double(image.size.width)
+        let height = height ?? Double(image.size.height)
 
-        // Calculate aspect ratios
-        let desiredAspect = desiredWidth / desiredHeight
-        let sourceAspect = image.size.width / image.size.height
-
-        var scale: CGFloat
-        var scaledWidth: CGFloat
-        var scaledHeight: CGFloat
-
-        if sourceAspect > desiredAspect {
-            // Source is wider than desired aspect ratio
-            scale = desiredHeight / image.size.height
+        // Apply effectiveScale to clamp the scale value between 1.0 and 5.0
+        let effectiveScale: Double
+        if scale < 1.0 {
+            effectiveScale = 1.0
+        } else if scale > 5.0 {
+            effectiveScale = 5.0
         } else {
-            // Source is taller than desired aspect ratio
-            scale = desiredWidth / image.size.width
+            effectiveScale = scale
         }
 
-        scaledWidth = image.size.width * scale
-        scaledHeight = image.size.height * scale
-
-        // Scale the image
-        UIGraphicsBeginImageContextWithOptions(CGSize(width: scaledWidth, height: scaledHeight), false, image.scale)
-        image.draw(in: CGRect(x: 0, y: 0, width: scaledWidth, height: scaledHeight))
-        let scaledImage = UIGraphicsGetImageFromCurrentImageContext()
-        UIGraphicsEndImageContext()
-
-        guard let scaled = scaledImage else {
-            return image
-        }
+        // Calculate the size of the crop rectangle based on scale
+        let cropWidth = CGFloat(width) / CGFloat(effectiveScale)
+        let cropHeight = CGFloat(height) / CGFloat(effectiveScale)
 
         // Calculate the top-left coordinates for center-cropping
-        let x = (scaledWidth - desiredWidth) / 2
-        let y = (scaledHeight - desiredHeight) / 2
-        let cropRect = CGRect(x: x, y: y, width: desiredWidth, height: desiredHeight)
+        let left = (image.size.width - cropWidth) / 2
+        let top = (image.size.height - cropHeight) / 2
+
+        // Ensure crop bounds are within the source image
+        let finalCropWidth = left < 0 ? image.size.width : min(cropWidth, image.size.width - left)
+        let finalCropHeight = top < 0 ? image.size.height : min(cropHeight, image.size.height - top)
 
         // Center-crop the image
-        guard let cgImage = scaled.cgImage?.cropping(to: cropRect) else {
+        guard let cgImage = image.cgImage?.cropping(to: CGRect(x: left, y: top, width: finalCropWidth, height: finalCropHeight)) else {
             return image
         }
         let croppedImage = UIImage(cgImage: cgImage, scale: image.scale, orientation: image.imageOrientation)
 
-        // Create a new image with oval mask
-        UIGraphicsBeginImageContextWithOptions(desiredSize, false, image.scale)
-        let context = UIGraphicsGetCurrentContext()
+        // Scale the cropped image back to desired size with scale factor 1.0
+        let scaledImage = UIGraphicsImageRenderer(size: CGSize(width: width, height: height), format: {
+            let format = UIGraphicsImageRendererFormat.default()
+            format.scale = 1.0 // Set scale to 1.0 to prevent automatic scaling
+            return format
+        }()).image { _ in
+            croppedImage.draw(in: CGRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height)))
+        }
 
-        // Draw the oval path
-        let rect = CGRect(origin: .zero, size: desiredSize)
-        context?.addEllipse(in: rect)
-        context?.clip()
+        // Create a new image with oval mask with scale factor 1.0
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: width, height: height), format: {
+            let format = UIGraphicsImageRendererFormat.default()
+            format.scale = 1.0 // Set scale to 1.0 to prevent automatic scaling
+            return format
+        }())
+        let ovalImage = renderer.image { context in
+            // Draw the oval path
+            let rect = CGRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height))
+            context.cgContext.addEllipse(in: rect)
+            context.cgContext.clip()
 
-        // Draw the cropped image within the oval
-        croppedImage.draw(in: rect)
+            // Draw the scaled image within the oval
+            scaledImage.draw(in: rect)
+        }
 
-        let ovalImage = UIGraphicsGetImageFromCurrentImageContext()
-        UIGraphicsEndImageContext()
-
-        return ovalImage ?? image
+        return ovalImage
     }
 
 }

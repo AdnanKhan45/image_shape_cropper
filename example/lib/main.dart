@@ -21,6 +21,7 @@ class MyApp extends StatelessWidget {
       body: Center(
         child: ElevatedButton(
           onPressed: () async {
+
               print("Button pressed. Opening image picker.");
               final picker = ImagePicker();
               final pickedFile = await picker.pickImage(source: ImageSource.gallery);
@@ -31,6 +32,7 @@ class MyApp extends StatelessWidget {
                   angle: 0, // Rotate 45 degrees
                   width: 150,
                   height: 300,
+                  scale: 4.0
                 );
 
                 if (bytes != null) {
