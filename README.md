@@ -29,7 +29,7 @@ final bytes = await _cropper.cropOval(
   angle: 0, // Rotate any degrees
   width: 150,
   height: 300,
-  scale: 1.0, // between 1.0 & 5.0
+  scale: 1.0, // between 0.0 & 5.0
   compressQuality: 100,
   compressFormat: "png"
 );
