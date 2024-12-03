@@ -32,7 +32,7 @@ class MyApp extends StatelessWidget {
                   angle: 0, // Rotate 45 degrees
                   width: 150,
                   height: 300,
-                  scale: 4.0
+                  scale: 1.0
                 );
 
                 if (bytes != null) {

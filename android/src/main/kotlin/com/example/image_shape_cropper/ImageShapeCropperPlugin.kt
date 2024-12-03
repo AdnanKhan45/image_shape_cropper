@@ -24,7 +24,7 @@ class ImageShapeCropperPlugin: FlutterPlugin, MethodChannel.MethodCallHandler {
         val angle = call.argument<Double>("angle") ?: 0.0
         val width = call.argument<Double>("width")
         val height = call.argument<Double>("height")
-        val scale = call.argument<Double>("scale") ?: 1.0
+        val scale = call.argument<Double>("scale") ?: 0.0
         val compressFormat = call.argument<String>("compressFormat") ?: "png"
         val compressQuality = call.argument<Int>("compressQuality") ?: 100
 
@@ -89,16 +89,16 @@ class ImageShapeCropperPlugin: FlutterPlugin, MethodChannel.MethodCallHandler {
     val width = desiredWidth ?: source.width.toDouble()
     val height = desiredHeight ?: source.height.toDouble()
 
-    // Ensure scale is at least 1.0
+    // Clamp the scale between 0.0 and 5.0
     val effectiveScale = when {
-      scale < 1.0 -> 1.0
+      scale < 0.0 -> 0.0
       scale > 5.0 -> 5.0
       else -> scale
     }
 
     // Calculate the size of the crop rectangle based on scale
-    val cropWidth = (width / effectiveScale).toFloat()
-    val cropHeight = (height / effectiveScale).toFloat()
+    val cropWidth = (width / (1 + effectiveScale)).toFloat()
+    val cropHeight = (height / (1 + effectiveScale)).toFloat()
 
     // Calculate the top-left coordinates for center-cropping
     val left = ((source.width - cropWidth) / 2).toInt()
@@ -137,6 +137,7 @@ class ImageShapeCropperPlugin: FlutterPlugin, MethodChannel.MethodCallHandler {
 
     return output
   }
+
 
   override fun onDetachedFromEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
     channel.setMethodCallHandler(null)

@@ -27,7 +27,7 @@ public class ImageShapeCropperPlugin: NSObject, FlutterPlugin {
             let angle = args["angle"] as? Double ?? 0.0
             let width = args["width"] as? Double
             let height = args["height"] as? Double
-            let scale = args["scale"] as? Double ?? 1.0
+            let scale = args["scale"] as? Double ?? 0.0 // Default to 0.0 (no zoom)
             let compressFormat = args["compressFormat"] as? String ?? "png"
             let compressQuality = args["compressQuality"] as? Int ?? 100
 
@@ -100,13 +100,15 @@ public class ImageShapeCropperPlugin: NSObject, FlutterPlugin {
 
     // Helper method to crop the image into an oval shape with scaling
     private func cropOvalImage(image: UIImage, width: Double?, height: Double?, scale: Double) -> UIImage {
-        let width = width ?? Double(image.size.width)
-        let height = height ?? Double(image.size.height)
+        // Convert desiredWidth and desiredHeight from pixels to points
+        // iOS UIImage.size is in points, and UIImage.scale represents pixels per point
+        let desiredWidthPoints = (width ?? Double(image.size.width)) / Double(image.scale)
+        let desiredHeightPoints = (height ?? Double(image.size.height)) / Double(image.scale)
 
-        // Apply effectiveScale to clamp the scale value between 1.0 and 5.0
+        // Clamp the scale between 0.0 and 5.0
         let effectiveScale: Double
-        if scale < 1.0 {
-            effectiveScale = 1.0
+        if scale < 0.0 {
+            effectiveScale = 0.0
         } else if scale > 5.0 {
             effectiveScale = 5.0
         } else {
@@ -114,8 +116,12 @@ public class ImageShapeCropperPlugin: NSObject, FlutterPlugin {
         }
 
         // Calculate the size of the crop rectangle based on scale
-        let cropWidth = CGFloat(width) / CGFloat(effectiveScale)
-        let cropHeight = CGFloat(height) / CGFloat(effectiveScale)
+        // Using (1 + scale) to ensure:
+        // scale = 0.0 -> cropWidth = desiredWidthPoints (no zoom)
+        // scale = 1.0 -> cropWidth = desiredWidthPoints / 2 (1x zoom)
+        // scale = 2.0 -> cropWidth = desiredWidthPoints / 3 (2x zoom), etc.
+        let cropWidth = CGFloat(desiredWidthPoints) / CGFloat(1 + effectiveScale)
+        let cropHeight = CGFloat(desiredHeightPoints) / CGFloat(1 + effectiveScale)
 
         // Calculate the top-left coordinates for center-cropping
         let left = (image.size.width - cropWidth) / 2
@@ -132,23 +138,23 @@ public class ImageShapeCropperPlugin: NSObject, FlutterPlugin {
         let croppedImage = UIImage(cgImage: cgImage, scale: image.scale, orientation: image.imageOrientation)
 
         // Scale the cropped image back to desired size with scale factor 1.0
-        let scaledImage = UIGraphicsImageRenderer(size: CGSize(width: width, height: height), format: {
+        let scaledImage = UIGraphicsImageRenderer(size: CGSize(width: desiredWidthPoints, height: desiredHeightPoints), format: {
             let format = UIGraphicsImageRendererFormat.default()
             format.scale = 1.0 // Set scale to 1.0 to prevent automatic scaling
             return format
         }()).image { _ in
-            croppedImage.draw(in: CGRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height)))
+            croppedImage.draw(in: CGRect(x: 0, y: 0, width: CGFloat(desiredWidthPoints), height: CGFloat(desiredHeightPoints)))
         }
 
         // Create a new image with oval mask with scale factor 1.0
-        let renderer = UIGraphicsImageRenderer(size: CGSize(width: width, height: height), format: {
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: desiredWidthPoints, height: desiredHeightPoints), format: {
             let format = UIGraphicsImageRendererFormat.default()
             format.scale = 1.0 // Set scale to 1.0 to prevent automatic scaling
             return format
         }())
         let ovalImage = renderer.image { context in
             // Draw the oval path
-            let rect = CGRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height))
+            let rect = CGRect(x: 0, y: 0, width: CGFloat(desiredWidthPoints), height: CGFloat(desiredHeightPoints))
             context.cgContext.addEllipse(in: rect)
             context.cgContext.clip()
 
@@ -156,7 +162,9 @@ public class ImageShapeCropperPlugin: NSObject, FlutterPlugin {
             scaledImage.draw(in: rect)
         }
 
-        return ovalImage
-    }
+        // Convert back to pixels by multiplying by image.scale
+        let finalImage = UIImage(cgImage: ovalImage.cgImage!, scale: image.scale, orientation: ovalImage.imageOrientation)
 
+        return finalImage
+    }
 }
